@@ -3,14 +3,6 @@ import { Construct } from 'constructs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
-// Removed old construct imports
-// import { AuthStack } from './constructs/auth-stack';
-// import { BusStack } from './constructs/bus-stack';
-// import { CognitoStack } from './constructs/cognito-stack';
-// import { BotmonStack } from './constructs/botmon-stack';
-// import { ApiRole } from './constructs/api-role';
-// import { RegionMap } from './helpers/mappings';
-// import { createCognitoCondition } from './helpers/conditions';
 
 // Import new constructs
 import { Auth } from './auth/auth-stack';
@@ -52,9 +44,6 @@ export class RStreamsPlatformStack extends cdk.Stack {
     // Set up the environment context from CDK context or props
     const environmentName = this.node.tryGetContext('environment') || props?.environmentName || 'dev';
 
-    // Remove Region Mapping
-    // const cfnMapping = new cdk.CfnMapping(this, 'RStreamsPlatformMappingsRegionMapA6B22AAF', { ... });
-
     // Instantiate new Auth construct
     const auth = new Auth(this, 'Auth', {
       environmentName: environmentName,
@@ -93,10 +82,6 @@ export class RStreamsPlatformStack extends cdk.Stack {
       monitorShardHashKey: this.node.tryGetContext('monitorShardHashKey') || 0
     });
 
-    // Remove old Cognito condition and stack
-    // const conditionResource = new cdk.CfnCondition(this, 'RStreamsPlatformConditionscreateCognito322D6C6E', { ... });
-    // const cognitoStack = new CognitoStack(this, 'RStreamsPlatformCognito780729EC');
-
     // Get custom JS and logins for Botmon UI customization
     const customJs = this.node.tryGetContext('customJs');
     const logins = this.node.tryGetContext('logins');
@@ -115,11 +100,6 @@ export class RStreamsPlatformStack extends cdk.Stack {
       createCognito: createCognito,
       existingCognitoId: inputCognitoId
     });
-
-    // Remove dependencies on old nested stacks
-    // botmonStack.nestedStack.addDependency(authStack.nestedStack);
-    // botmonStack.nestedStack.addDependency(busStack.nestedStack);
-    // botmonStack.nestedStack.addDependency(cognitoStack.nestedStack);
 
     // Create the SSM parameter using output from Bus construct
     const rsfParameter = new ssm.StringParameter(this, 'RStreamsPlatformRSFParameter', {
@@ -148,9 +128,6 @@ export class RStreamsPlatformStack extends cdk.Stack {
       description: 'RStreams Platform resource references',
       secretStringValue: cdk.SecretValue.unsafePlainText(secretValue.toString())
     });
-
-    // Remove old Leo Template output
-    // new cdk.CfnOutput(this, 'RStreamsPlatformOutputsLeoTemplateD3E132CC', { ... });
 
     // CloudFront URL for Botmon UI access
     new cdk.CfnOutput(this, 'BotmonURL', {

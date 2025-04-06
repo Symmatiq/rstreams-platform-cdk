@@ -46,6 +46,7 @@
     "is-semver": "^1.0.12",
     "later": "^1.2.0",
     "leo-auth": "^3.0.2",
+    "leo-config": "^1.1.0",
     "moment-round": "^1.0.1",
     "source-map-support": "^0.5.21"
   }

@@ -108,9 +108,14 @@ export class Bus extends Construct {
   constructor(scope: Construct, id: string, props: BusProps) {
     super(scope, id);
 
-    const stack = cdk.Stack.of(this);
+    const stack = props.stack ?? cdk.Stack.of(this);
+    const isTrustingAccount = props.isTrustingAccount ?? (props.trustedArns && props.trustedArns.length > 0);
+    
+    // Generate a timestamp suffix for unique resource names
+    const uniqueSuffix = new Date().getTime().toString().slice(-6);
+    
+    // Set up export prefix for resource exports
     const exportPrefix = props.exportNamePrefix ?? stack.stackName;
-    const isTrustingAccount = props.trustedArns && props.trustedArns.length > 0;
 
     // Define resources based on bus/cloudformation.json translation
 
@@ -121,7 +126,8 @@ export class Bus extends Construct {
         id.toLowerCase(), 
         's3', 
         props.environmentName.toLowerCase(),
-        stack.account.substring(0, 8) // Add AWS account ID suffix to make unique
+        stack.account.substring(0, 8), // Add AWS account ID suffix to make unique
+        uniqueSuffix // Add timestamp to ensure uniqueness
       ]), 
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       versioned: true,
@@ -171,7 +177,7 @@ export class Bus extends Construct {
 
     // 3. Kinesis Stream (LeoKinesisStream)
     const leoKinesis = new kinesis.Stream(this, 'leokinesisstream', {
-      streamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'kinesis', props.environmentName.toLowerCase()]),
+      streamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'kinesis', props.environmentName.toLowerCase(), uniqueSuffix]),
       shardCount: props.kinesisShards ?? 1,
       streamMode: props.kinesisShards ? kinesis.StreamMode.PROVISIONED : kinesis.StreamMode.ON_DEMAND,
     });
@@ -214,7 +220,7 @@ export class Bus extends Construct {
                 actions: ['kinesis:PutRecord', 'kinesis:PutRecords', 'firehose:PutRecord', 'firehose:PutRecordBatch', 's3:PutObject'],
                 resources: [
                     this.leoKinesisStream.streamArn,
-                    `arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'firehose', props.environmentName])}`, // Firehose ARN
+                    `arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}`, // Firehose ARN
                     this.leoS3Bucket.bucketArn, // Granting PutObject on bucket ARN itself is usually not needed
                     `${this.leoS3Bucket.bucketArn}/*` // Grant PutObject on objects within the bucket
                 ]
@@ -318,7 +324,7 @@ export class Bus extends Construct {
          new iam.PolicyStatement({
              sid: 'FirehoseLambdaSpecific',
             actions: ['firehose:PutRecord', 'firehose:PutRecordBatch'], // Ensure Firehose write is covered
-            resources: [`arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'firehose', props.environmentName])}`],
+            resources: [`arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}`],
          })
     ]);
 
@@ -356,14 +362,14 @@ export class Bus extends Construct {
             'logs:CreateLogStream',
             'logs:PutLogEvents'
         ],
-        resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/kinesisfirehose/${cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'firehose', props.environmentName])}:*`]
+        resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/kinesisfirehose/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}:*`]
     }));
 
     this.leoS3Bucket.grantReadWrite(firehoseDeliveryRole);
     this.leoKinesisStream.grantRead(firehoseDeliveryRole);
 
     const leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
-        deliveryStreamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase()]),
+        deliveryStreamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix]),
         deliveryStreamType: 'KinesisStreamAsSource',
         kinesisStreamSourceConfiguration: {
             kinesisStreamArn: this.leoKinesisStream.streamArn,
@@ -381,7 +387,7 @@ export class Bus extends Construct {
             compressionFormat: 'GZIP', // Changed to GZIP example
             cloudWatchLoggingOptions: {
                 enabled: true,
-                logGroupName: `/aws/kinesisfirehose/${cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'firehose', props.environmentName])}`,
+                logGroupName: `/aws/kinesisfirehose/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}`,
                 logStreamName: 'S3Delivery'
             }
         }

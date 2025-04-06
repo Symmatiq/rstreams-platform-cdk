@@ -458,11 +458,10 @@ export class Bus extends Construct {
             timeout: timeout || cdk.Duration.minutes(5),
             memorySize: configuredMemory,
             architecture: lambda.Architecture.X86_64,
-            awsSdkConnectionReuse: true,
+            awsSdkConnectionReuse: false,
             projectRoot: projectRootPath, // Set to main project root
             bundling: {
                 externalModules: [
-                    'aws-sdk', // v2 SDK (kept for now, maybe remove later if only v3 used)
                     '@aws-sdk/client-iam', // Add v3 IAM client to externals
                     'moment',
                     'leo-sdk',
@@ -603,10 +602,10 @@ export class Bus extends Construct {
         timeout: cdk.Duration.minutes(5),
         memorySize: 1024,
         architecture: lambda.Architecture.X86_64,
-        awsSdkConnectionReuse: true,
+        awsSdkConnectionReuse: false, // Changed to false since this setting is for AWS SDK v2
         bundling: {
             externalModules: [
-                'aws-sdk',
+                // 'aws-sdk', // Removed AWS SDK v2 dependency
                 'moment',
                 'leo-sdk',
                 'leo-cron',

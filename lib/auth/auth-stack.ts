@@ -176,7 +176,7 @@ export class Auth extends Construct {
       role: leoAuthRole,
       bundling: {
           externalModules: [
-              'aws-sdk', 'leo-config', 'leo-aws', 'leo-logger'
+              'leo-config', 'leo-aws', 'leo-logger'
           ],
           nodeModules: [],
           sourceMap: true,
@@ -209,7 +209,7 @@ export class Auth extends Construct {
       role: leoAuthRole,
       bundling: {
           externalModules: [
-              'aws-sdk', 'leo-config', 'leo-aws', 'leo-logger'
+              'leo-config', 'leo-aws', 'leo-logger'
           ],
           nodeModules: [],
           sourceMap: true,
@@ -247,7 +247,7 @@ export class Auth extends Construct {
       role: apiRole,
       bundling: {
           externalModules: [
-              'aws-sdk', 'leo-config', 'leo-auth'
+              'leo-config', 'leo-auth'
           ],
           nodeModules: [],
           sourceMap: true,

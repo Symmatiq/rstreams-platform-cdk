@@ -1,0 +1,39 @@
+{
+	"name": "leo_cron",
+	"version": "1.0.2",
+	"description": "Triggers bots to run by configuration",
+	"logicalResource": "LeoCronProcessor",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "nodemon --exec \"mocha --recursive -w\" ",
+		"debug": "mocha --recursive"
+	},
+	"config": {
+		"leo": {
+			"type": "bot",
+			"name": "Leo_core_cron",
+			"subscriptionFilter": true,
+			"handler": "handler",
+			"memory": {
+				"Ref": "CronProcessorMemory"
+			},
+			"timeout": 300,
+			"env": {
+				"LeoCron": "${LeoCron}",
+				"LeoSettings": "${LeoSettings}",
+				"LeoSystem": "${LeoSystem}"
+			},
+			"role": "LeoCronRole",
+			"DependsOn": [
+				"LeoCron"
+			]
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {}
+}

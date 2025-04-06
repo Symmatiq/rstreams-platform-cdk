@@ -1,0 +1,12 @@
+{
+  "name": "replicate",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Replicates events from one bus to another",
+  "main": "index.js",
+  "dependencies": {
+    "leo-sdk": "^2.0.0",
+    "leo-logger": "^1.0.0",
+    "@aws-sdk/client-sts": "^3.0.0"
+  }
+} 

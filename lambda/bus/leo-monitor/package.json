@@ -1,0 +1,54 @@
+{
+	"name": "leo_monitor",
+	"version": "1.0.0",
+	"description": "Writes bot stats to a queue",
+	"logicalResource": "LeoMonitor",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "nodemon --exec \"mocha --recursive -w\" ",
+		"debug": "mocha --recursive"
+	},
+	"config": {
+		"leo": {
+			"type": "bot",
+			"memory": {
+				"Ref": "LeoMonitorMemory"
+			},
+			"handler": "handler",
+			"timeout": 300,
+			"role": "LeoCronRole",
+			"cron": {
+				"id": "leo_cron_monitor",
+				"owner": "leo"
+			},
+			"env": {
+				"SHARD_HASH_KEY": "${MonitorShardHashKey}",
+				"leosdk": {
+					"region": "${AWS::Region}",
+					"kinesis": "${LeoKinesisStream}",
+					"s3": "${LeoS3}",
+					"firehose": "${LeoFirehoseStream}",
+					"resources": {
+						"LeoStream": "${LeoStream}",
+						"LeoCron": "${LeoCron}",
+						"LeoEvent": "${LeoEvent}",
+						"LeoSettings": "${LeoSettings}",
+						"LeoS3": "${LeoS3}",
+						"LeoKinesisStream": "${LeoKinesisStream}",
+						"LeoFirehoseStream": "${LeoFirehoseStream}",
+						"Region": "${AWS::Region}"
+					}
+				}
+			}
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"later": "^1.2.0"
+	}
+}

@@ -1,0 +1,51 @@
+{
+	"name": "Leo_install",
+	"version": "1.0.4",
+	"description": "Installs Bus bots into LeoCron table and registers external bots",
+	"logicalResource": "LeoInstallFunction",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "nodemon --exec \"mocha --recursive -w\" "
+	},
+	"config": {
+		"leo": {
+			"type": "raw",
+			"name": "Leo_install",
+			"handler": "handler",
+			"role": "LeoInstallRole",
+			"memory": 640,
+			"timeout": 300,
+			"cron": {
+				"name": "Leo_install",
+				"owner": "leo",
+				"settings": {},
+				"triggers": [
+					"commands.s3_bus_load_v2"
+				]
+			},
+			"env": {
+				"Resources": {
+					"LeoS3LoadTrigger": "${LeoS3LoadTrigger}",
+					"LeoS3": "${LeoS3}",
+					"LeoCron": "${LeoCron}",
+					"LeoFirehoseStreamProcessor": "${LeoFirehoseStreamProcessor}",
+					"LeoSettings": "${LeoSettings}",
+					"LeoBotPolicy": "${LeoBotPolicy}",
+					"LeoFirehoseRole": "${LeoFirehoseRole}",
+					"LeoSystem": "${LeoSystem}",
+					"Region": "${AWS::Region}"
+				},
+				"AWS": {
+					"AccountId": "${AWS::AccountId}",
+					"region": "${AWS::Region}"
+				}
+			}
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC"
+}

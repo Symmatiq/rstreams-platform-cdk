@@ -1,0 +1,51 @@
+{
+	"name": "Leo_firehose_processor",
+	"version": "1.0.0",
+	"description": "Ingests events from firehose",
+	"logicalResource": "LeoFirehoseStreamProcessor",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "nodemon --exec \"mocha --recursive -w\" "
+	},
+	"config": {
+		"leo": {
+			"type": "cron",
+			"name": "Leo_firehose_processor",
+			"handler": "handler",
+			"role": "LeoFirehoseRole",
+			"memory": {
+				"Ref": "FirehoseStreamProcessorMemory"
+			},
+			"timeout": 600,
+			"cron": {
+				"name": "Leo_firehose_processor",
+				"owner": "leo",
+				"settings": {},
+				"triggers": [
+					"commands.s3_bus_load"
+				]
+			},
+			"env": {
+				"Resources": {
+					"LeoStream": "${LeoStream}",
+					"LeoS3": "${LeoS3}",
+					"LeoKinesisStream": "${LeoKinesisStream}",
+					"LeoCron": "${LeoCron}",
+					"LeoEvent": "${LeoEvent}",
+					"LeoSettings": "${LeoSettings}",
+					"Region": "${AWS::Region}"
+				}
+			},
+			"DependsOn": [
+				"LeoFirehoseStream",
+				"LeoFirehoseRole"
+			]
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC"
+}

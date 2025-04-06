@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leo BotMon UI</title>
+    <meta charset="UTF-8">
+    <!-- Placeholder content -->
+</head>
+<body>
+    <h1>Loading BotMon UI...</h1>
+    <!-- Content will be dynamically loaded -->
+    <script>
+        // Placeholder for leo config - actual values injected by lambda
+        var leo = {}; 
+    </script>
+</body>
+</html> 

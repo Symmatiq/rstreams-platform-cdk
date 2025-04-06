@@ -1,0 +1,41 @@
+{
+	"name": "leo_cron_scheduler",
+	"version": "1.0.3",
+	"description": "Triggers bots to run by configuration",
+	"logicalResource": "LeoCronScheduler",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "leo-cli test ."
+	},
+	"config": {
+		"leo": {
+			"type": "bot",
+			"name": "Leo_cron_scheduler",
+			"handler": "handler",
+			"memory": 256,
+			"timeout": 300,
+			"env": {
+				"LeoCron": "${LeoCron}",
+				"LeoSettings": "${LeoSettings}"
+			},
+			"role": "LeoCronRole",
+			"build": {
+				"include": [
+					"node_modules/later"
+				]
+			},
+			"DependsOn": [
+				"LeoCron"
+			]
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"later": "^1.2.0"
+	}
+}

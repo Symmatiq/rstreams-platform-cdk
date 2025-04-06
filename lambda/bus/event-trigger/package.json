@@ -1,0 +1,38 @@
+{
+	"name": "leo_cron_stream_trigger",
+	"version": "1.0.0",
+	"description": "Triggers bots from a write to a queue",
+	"logicalResource": "LeoEventTrigger",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "nodemon --exec \"mocha --recursive -w\" "
+	},
+	"config": {
+		"leo": {
+			"type": "bot",
+			"name": "Leo_core_cron_stream_trigger",
+			"handler": "handler",
+			"role": "LeoCronRole",
+			"memory": {
+				"Ref": "EventTriggerMemory"
+			},
+			"timeout": 300,
+			"env": {
+				"Resources": {
+					"LeoCron": "${LeoCron}",
+					"LeoSettings": "${LeoSettings}",
+					"Region": "${AWS::Region}"
+				}
+			},
+			"DependsOn": [
+				"LeoEvent"
+			]
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC"
+}

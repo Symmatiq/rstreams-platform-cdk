@@ -1,0 +1,49 @@
+{
+	"name": "Leo_core_kinesis_processor",
+	"version": "1.0.0",
+	"description": "Ingests events from kinesis",
+	"logicalResource": "LeoKinesisStreamProcessor",
+	"main": "index.js",
+	"directories": {
+		"test": "test"
+	},
+	"scripts": {
+		"test": "mocha --recursive -w "
+	},
+	"config": {
+		"leo": {
+			"type": "bot",
+			"name": "Leo_core_kinesis_processor",
+			"handler": "handler",
+			"role": "LeoKinesisRole",
+			"memory": {
+				"Ref": "KinesisStreamProcessorMemory"
+			},
+			"timeout": 300,
+			"cron": {
+				"name": "Leo_core_kinesis_processor",
+				"owner": "leo",
+				"settings": {}
+			},
+			"env": {
+				"ttlSeconds": "${StreamTTLSeconds}",
+				"Resources": {
+					"LeoStream": "${LeoStream}",
+					"LeoS3": "${LeoS3}",
+					"LeoCron": "${LeoCron}",
+					"LeoEvent": "${LeoEvent}",
+					"LeoSettings": "${LeoSettings}",
+					"LeoSystem": "${LeoSystem}",
+					"Region": "${AWS::Region}"
+				}
+			},
+			"DependsOn": [
+				"LeoKinesisStream",
+				"LeoKinesisRole"
+			]
+		}
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC"
+}

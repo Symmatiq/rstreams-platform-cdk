@@ -115,7 +115,7 @@ export class Bus extends Construct {
     // Define resources based on bus/cloudformation.json translation
 
     // 1. S3 Bucket (LeoS3)
-    const leoS3 = new s3.Bucket(this, 'LeoS3', {
+    const leoS3 = new s3.Bucket(this, 'leos3', {
       bucketName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 's3', props.environmentName.toLowerCase()]), // Ensure unique name and all lowercase
       removalPolicy: cdk.RemovalPolicy.RETAIN, // Or DESTROY depending on requirements
       // Add versioning, encryption, lifecycle rules as needed from CFN
@@ -163,11 +163,10 @@ export class Bus extends Construct {
     this.leoSystemTable = createLeoTable('LeoSystem', { name: 'id', type: dynamodb.AttributeType.STRING });
 
     // 3. Kinesis Stream (LeoKinesisStream)
-    const leoKinesis = new kinesis.Stream(this, 'LeoKinesisStream', {
-      streamName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'kinesis', props.environmentName]),
-      shardCount: props.kinesisShards ?? 1, // Use kinesisShards parameter if provided, default to 1
-      // retentionPeriod: cdk.Duration.hours(24), // Default is 24h
-      streamMode: props.kinesisShards ? kinesis.StreamMode.PROVISIONED : kinesis.StreamMode.ON_DEMAND, // Use provisioned if shards specified
+    const leoKinesis = new kinesis.Stream(this, 'leokinesisstream', {
+      streamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'kinesis', props.environmentName.toLowerCase()]),
+      shardCount: props.kinesisShards ?? 1,
+      streamMode: props.kinesisShards ? kinesis.StreamMode.PROVISIONED : kinesis.StreamMode.ON_DEMAND,
     });
     this.leoKinesisStream = leoKinesis;
     new cdk.CfnOutput(this, 'LeoKinesisStreamOutput', {
@@ -356,8 +355,8 @@ export class Bus extends Construct {
     this.leoS3Bucket.grantReadWrite(firehoseDeliveryRole);
     this.leoKinesisStream.grantRead(firehoseDeliveryRole);
 
-    const leoFirehose = new firehose.CfnDeliveryStream(this, 'LeoFirehoseStream', {
-        deliveryStreamName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'firehose', props.environmentName]),
+    const leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
+        deliveryStreamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase()]),
         deliveryStreamType: 'KinesisStreamAsSource',
         kinesisStreamSourceConfiguration: {
             kinesisStreamArn: this.leoKinesisStream.streamArn,

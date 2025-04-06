@@ -561,8 +561,8 @@ export class Botmon extends Construct {
     });
 
     // 4. S3 Bucket for UI (WebsiteBucket)
-    const uiBucket = new s3.Bucket(this, 'WebsiteBucket', {
-        bucketName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'ui', props.environmentName]),
+    const uiBucket = new s3.Bucket(this, 'websitebucket', {
+        bucketName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'ui', props.environmentName.toLowerCase()]),
         websiteIndexDocument: 'index.html',
         websiteErrorDocument: 'index.html',
         publicReadAccess: false, // Access via CloudFront OAI

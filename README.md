@@ -73,6 +73,39 @@ To deploy with queue replication enabled:
 cdk deploy --context queueReplication='{"source": {"region": "us-east-1", "accountId": "1234567890"}, "destination": {"region": "us-west-2", "accountId": "0987654321"}}'
 ```
 
+### Custom Stack Names
+
+You can customize the CloudFormation stack name during deployment using one of the following methods:
+
+1. **Using the `--stack-name` parameter with `cdk deploy`**:
+   ```
+   cdk deploy --stack-name MyCustomRStreamsStack
+   ```
+
+2. **Specifying the name in the stack constructor** (in your code):
+   ```typescript
+   new RStreamsPlatformStack(app, 'MyStack', {
+     stackName: 'MyCustomRStreamsStack',
+     // other props...
+   });
+   ```
+
+3. **Using context variables with CDK deploy**:
+   ```
+   cdk deploy -c stackName=MyCustomRStreamsStack
+   ```
+   
+   Then use it in your code:
+   ```typescript
+   const stackName = app.node.tryGetContext('stackName') || 'DefaultStackName';
+   new RStreamsPlatformStack(app, 'MyStack', {
+     stackName: stackName,
+     // other props...
+   });
+   ```
+
+Using a custom stack name can be useful for creating multiple isolated instances of the RStreams infrastructure or for adhering to your organization's naming conventions.
+
 ## Programmatic Usage in Node.js
 
 You can also use the RStreams Platform CDK stack programmatically in your Node.js applications. This allows you to integrate and manage RStreams infrastructure as part of your application code.

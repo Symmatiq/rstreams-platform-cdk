@@ -2,6 +2,7 @@ import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as iam from 'aws-cdk-lib/aws-iam';
+import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 // Removed old construct imports
 // import { AuthStack } from './constructs/auth-stack';
 // import { BusStack } from './constructs/bus-stack';
@@ -127,6 +128,25 @@ export class RStreamsPlatformStack extends cdk.Stack {
       description: 'RStreams Bus Stack Reference Name'
     });
 
+    // Create a secret in Secrets Manager with table names and other references
+    const secretValue = JSON.stringify({
+      LeoStream: cdk.Fn.importValue(`${this.stackName}-LeoStream`),
+      LeoCron: cdk.Fn.importValue(`${this.stackName}-LeoCron`),
+      LeoEvent: cdk.Fn.importValue(`${this.stackName}-LeoEvent`),
+      LeoSettings: cdk.Fn.importValue(`${this.stackName}-LeoSettings`),
+      LeoSystem: cdk.Fn.importValue(`${this.stackName}-LeoSystem`),
+      LeoKinesisStream: cdk.Fn.importValue(`${this.stackName}-LeoKinesisStream`),
+      LeoFirehoseStream: cdk.Fn.importValue(`${this.stackName}-LeoFirehoseStream`),
+      LeoS3: cdk.Fn.importValue(`${this.stackName}-LeoS3`),
+      Region: cdk.Fn.importValue(`${this.stackName}-Region`)
+    });
+
+    const platformSecret = new secretsmanager.Secret(this, 'RStreamsPlatformSecret', {
+      secretName: `rstreams-${this.stackName}`,
+      description: 'RStreams Platform resource references',
+      secretStringValue: cdk.SecretValue.unsafePlainText(secretValue)
+    });
+
     // Remove old Leo Template output
     // new cdk.CfnOutput(this, 'RStreamsPlatformOutputsLeoTemplateD3E132CC', { ... });
 
@@ -134,6 +154,12 @@ export class RStreamsPlatformStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'BotmonURL', {
       description: 'Botmon UI URL',
       value: `https://${botmon.cloudfrontDistribution.distributionDomainName}`
+    });
+
+    // Add output for the Secret ARN
+    new cdk.CfnOutput(this, 'PlatformSecretARN', {
+      description: 'ARN of the RStreams Platform Secret',
+      value: platformSecret.secretArn
     });
 
     // Create ApiRole for Lambda function invocation

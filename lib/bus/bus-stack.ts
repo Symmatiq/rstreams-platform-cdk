@@ -132,7 +132,7 @@ export class Bus extends Construct {
     // 2. DynamoDB Tables (LeoStream, LeoArchive, LeoEvent, LeoSettings, LeoCron, LeoSystem)
     const createLeoTable = (tableName: string, partitionKey: dynamodb.Attribute, sortKey?: dynamodb.Attribute, stream?: dynamodb.StreamViewType): dynamodb.Table => {
       const table = new dynamodb.Table(this, tableName, {
-        tableName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), tableName.toLowerCase(), props.environmentName]),
+        tableName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), tableName, props.environmentName]),
         partitionKey: partitionKey,
         sortKey: sortKey,
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,

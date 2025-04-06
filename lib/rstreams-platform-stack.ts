@@ -129,22 +129,24 @@ export class RStreamsPlatformStack extends cdk.Stack {
     });
 
     // Create a secret in Secrets Manager with table names and other references
-    const secretValue = JSON.stringify({
-      LeoStream: cdk.Fn.importValue(`${this.stackName}-LeoStream`),
-      LeoCron: cdk.Fn.importValue(`${this.stackName}-LeoCron`),
-      LeoEvent: cdk.Fn.importValue(`${this.stackName}-LeoEvent`),
-      LeoSettings: cdk.Fn.importValue(`${this.stackName}-LeoSettings`),
-      LeoSystem: cdk.Fn.importValue(`${this.stackName}-LeoSystem`),
-      LeoKinesisStream: cdk.Fn.importValue(`${this.stackName}-LeoKinesisStream`),
-      LeoFirehoseStream: cdk.Fn.importValue(`${this.stackName}-LeoFirehoseStream`),
-      LeoS3: cdk.Fn.importValue(`${this.stackName}-LeoS3`),
-      Region: cdk.Fn.importValue(`${this.stackName}-Region`)
-    });
+    const secretValue = cdk.Fn.join('', [
+      '{',
+      '"LeoStream":"', bus.leoStreamTable.tableName, '",',
+      '"LeoCron":"', bus.leoCronTable.tableName, '",',
+      '"LeoEvent":"', bus.leoEventTable.tableName, '",',
+      '"LeoSettings":"', bus.leoSettingsTable.tableName, '",',
+      '"LeoSystem":"', bus.leoSystemTable.tableName, '",',
+      '"LeoKinesisStream":"', bus.leoKinesisStream.streamName, '",',
+      '"LeoFirehoseStream":"', bus.leoFirehoseStreamName, '",',
+      '"LeoS3":"', bus.leoS3Bucket.bucketName, '",',
+      '"Region":"', this.region, '"',
+      '}'
+    ]);
 
     const platformSecret = new secretsmanager.Secret(this, 'RStreamsPlatformSecret', {
       secretName: `rstreams-${this.stackName}`,
       description: 'RStreams Platform resource references',
-      secretStringValue: cdk.SecretValue.unsafePlainText(secretValue)
+      secretStringValue: cdk.SecretValue.unsafePlainText(secretValue.toString())
     });
 
     // Remove old Leo Template output

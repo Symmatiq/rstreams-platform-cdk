@@ -116,7 +116,7 @@ export class Bus extends Construct {
 
     // 1. S3 Bucket (LeoS3)
     const leoS3 = new s3.Bucket(this, 'LeoS3', {
-      bucketName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 's3', props.environmentName]), // Ensure unique name
+      bucketName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 's3', props.environmentName.toLowerCase()]), // Ensure unique name and all lowercase
       removalPolicy: cdk.RemovalPolicy.RETAIN, // Or DESTROY depending on requirements
       // Add versioning, encryption, lifecycle rules as needed from CFN
       versioned: true,

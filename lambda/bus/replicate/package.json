@@ -5,8 +5,8 @@
   "description": "Replicates events from one bus to another",
   "main": "index.js",
   "dependencies": {
-    "leo-sdk": "^2.0.0",
-    "leo-logger": "^1.0.0",
+    "leo-sdk": "^6.0.18",
+    "leo-logger": "^1.0.7",
     "@aws-sdk/client-sts": "^3.0.0"
   }
 } 

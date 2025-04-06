@@ -270,8 +270,10 @@ export class Botmon extends Construct {
             bundling: {
                 externalModules: [
                     // 'aws-sdk', // Removed AWS SDK v2 dependency
-                    'leo-sdk', // ADD leo-sdk as external for Botmon lambdas
-                    'later'    // Mark 'later' as external to avoid bundling issues
+                ],
+                nodeModules: [
+                    'leo-sdk', // ADD leo-sdk as nodeModule for Botmon lambdas
+                    'later'    // Mark 'later' as nodeModule to avoid bundling issues
                 ],
                 sourceMap: true,
                 define: defineOptions

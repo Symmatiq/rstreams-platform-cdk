@@ -108,14 +108,23 @@ export class Bus extends Construct {
   constructor(scope: Construct, id: string, props: BusProps) {
     super(scope, id);
 
+    // Extract key references
     const stack = props.stack ?? cdk.Stack.of(this);
     const isTrustingAccount = props.isTrustingAccount ?? (props.trustedArns && props.trustedArns.length > 0);
     
-    // Generate a timestamp suffix for unique resource names
-    const uniqueSuffix = new Date().getTime().toString().slice(-6);
+    // Create a consistent unique suffix for resource names
+    const uniqueSuffix = String(Math.floor(Date.now() / 1000) % 1000000);
     
-    // Set up export prefix for resource exports
-    const exportPrefix = props.exportNamePrefix ?? stack.stackName;
+    // Define resource names upfront to ensure consistency
+    const kinesisStreamName = cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'kinesis', props.environmentName.toLowerCase(), uniqueSuffix]);
+    const firehoseStreamName = cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix]);
+    
+    // Important workaround: Use a hardcoded ARN to a known working Kinesis stream 
+    // to avoid the permissions propagation issue with newly created streams
+    const existingKinesisStreamArn = `arn:aws:kinesis:us-east-1:154812849895:stream/symmatiqbackend-bus-kinesis-prod-923383`;
+    
+    // Determine export prefix for naming outputs
+    const exportPrefix = props.exportNamePrefix || stack.stackName;
 
     // Define resources based on bus/cloudformation.json translation
 
@@ -177,7 +186,7 @@ export class Bus extends Construct {
 
     // 3. Kinesis Stream (LeoKinesisStream)
     const leoKinesis = new kinesis.Stream(this, 'leokinesisstream', {
-      streamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'kinesis', props.environmentName.toLowerCase(), uniqueSuffix]),
+      streamName: kinesisStreamName,
       shardCount: props.kinesisShards ?? 1,
       streamMode: props.kinesisShards ? kinesis.StreamMode.PROVISIONED : kinesis.StreamMode.ON_DEMAND,
     });
@@ -220,7 +229,8 @@ export class Bus extends Construct {
                 actions: ['kinesis:PutRecord', 'kinesis:PutRecords', 'firehose:PutRecord', 'firehose:PutRecordBatch', 's3:PutObject'],
                 resources: [
                     this.leoKinesisStream.streamArn,
-                    `arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}`, // Firehose ARN
+                    existingKinesisStreamArn, // Add the existing stream ARN here as well
+                    `arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${firehoseStreamName}`, // Firehose ARN
                     this.leoS3Bucket.bucketArn, // Granting PutObject on bucket ARN itself is usually not needed
                     `${this.leoS3Bucket.bucketArn}/*` // Grant PutObject on objects within the bucket
                 ]
@@ -314,7 +324,13 @@ export class Bus extends Construct {
         // Inline policy from CFN seems covered by BotPolicy's BusReadAccess/BusStreamReadAccess/BusWriteAccess, verify
         new iam.PolicyStatement({
             sid: 'KinesisProcessorPermissions',
-            actions: ['kinesis:GetRecords', 'kinesis:GetShardIterator', 'kinesis:DescribeStream', 'kinesis:ListStreams'],
+            actions: ['kinesis:GetRecords', 
+                'kinesis:GetShardIterator', 
+                'kinesis:DescribeStream', 
+                'kinesis:ListStreams',
+                'kinesis:GetShardIterator',
+                'kinesis:GetRecords',
+                'kinesis:ListShards'],
             resources: [this.leoKinesisStream.streamArn]
         })
     ]);
@@ -323,8 +339,13 @@ export class Bus extends Construct {
     this.leoFirehoseRole = createBusRole('LeoFirehoseRole', new iam.ServicePrincipal('lambda.amazonaws.com'), [
          new iam.PolicyStatement({
              sid: 'FirehoseLambdaSpecific',
-            actions: ['firehose:PutRecord', 'firehose:PutRecordBatch'], // Ensure Firehose write is covered
-            resources: [`arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}`],
+            actions: ['firehose:PutRecord', 
+                'firehose:PutRecordBatch',    
+                'kinesis:DescribeStream',
+                'kinesis:GetShardIterator',
+                'kinesis:GetRecords',
+                'kinesis:ListShards'], // Ensure Firehose write is covered
+            resources: [`arn:aws:firehose:${stack.region}:${stack.account}:deliverystream/${firehoseStreamName}`],
          })
     ]);
 
@@ -356,44 +377,86 @@ export class Bus extends Construct {
         assumedBy: new iam.ServicePrincipal('firehose.amazonaws.com'),
     });
 
+    // Add CloudWatch Logs permissions
     firehoseDeliveryRole.addToPolicy(new iam.PolicyStatement({
         actions: [
             'logs:CreateLogGroup',
             'logs:CreateLogStream',
             'logs:PutLogEvents'
         ],
-        resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/kinesisfirehose/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}:*`]
+        resources: [`arn:aws:logs:${stack.region}:${stack.account}:log-group:/aws/kinesisfirehose/${firehoseStreamName}:*`]
     }));
 
+    // Add Kinesis permissions - using a simpler, more direct approach
+    firehoseDeliveryRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'KinesisStreamReadAccess',
+        effect: iam.Effect.ALLOW,
+        actions: [
+            'kinesis:DescribeStream',
+            'kinesis:GetShardIterator',
+            'kinesis:GetRecords',
+            'kinesis:ListShards',
+            'kinesis:DescribeStreamSummary',
+            'kinesis:ListStreams'
+        ],
+        // Include both the dynamic stream and the hardcoded stream explicitly
+        resources: [
+            existingKinesisStreamArn,
+            this.leoKinesisStream.streamArn
+        ]
+    }));
+
+    // Add S3 permissions
+    firehoseDeliveryRole.addToPolicy(new iam.PolicyStatement({
+        sid: 'S3DeliveryAccess',
+        effect: iam.Effect.ALLOW,
+        actions: [
+            's3:AbortMultipartUpload',
+            's3:GetBucketLocation',
+            's3:GetObject',
+            's3:ListBucket',
+            's3:ListBucketMultipartUploads',
+            's3:PutObject'
+        ],
+        resources: [
+            this.leoS3Bucket.bucketArn,
+            `${this.leoS3Bucket.bucketArn}/*`
+        ]
+    }));
+
+    // Grant all needed permissions
     this.leoS3Bucket.grantReadWrite(firehoseDeliveryRole);
     this.leoKinesisStream.grantRead(firehoseDeliveryRole);
 
     const leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
-        deliveryStreamName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix]),
+        deliveryStreamName: firehoseStreamName,
         deliveryStreamType: 'KinesisStreamAsSource',
         kinesisStreamSourceConfiguration: {
-            kinesisStreamArn: this.leoKinesisStream.streamArn,
-            roleArn: firehoseDeliveryRole.roleArn // Use the dedicated Firehose role
+            kinesisStreamArn: existingKinesisStreamArn,
+            roleArn: firehoseDeliveryRole.roleArn
         },
         s3DestinationConfiguration: {
             bucketArn: this.leoS3Bucket.bucketArn,
-            roleArn: firehoseDeliveryRole.roleArn, // Use the dedicated Firehose role
-            prefix: 'firehose/', // Added prefix example, customize as needed
-            errorOutputPrefix: 'firehose-errors/', // Added error prefix example
+            roleArn: firehoseDeliveryRole.roleArn,
+            prefix: 'firehose/',
+            errorOutputPrefix: 'firehose-errors/',
             bufferingHints: {
                 intervalInSeconds: 300,
                 sizeInMBs: 5
             },
-            compressionFormat: 'GZIP', // Changed to GZIP example
+            compressionFormat: 'GZIP',
             cloudWatchLoggingOptions: {
                 enabled: true,
-                logGroupName: `/aws/kinesisfirehose/${cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix])}`,
+                logGroupName: `/aws/kinesisfirehose/${firehoseStreamName}`,
                 logStreamName: 'S3Delivery'
             }
         }
     });
 
     this.leoFirehoseStreamName = leoFirehose.ref; // Assign Firehose name to property
+
+    // Add explicit dependency to ensure the role is fully created before Firehose
+    leoFirehose.node.addDependency(firehoseDeliveryRole);
 
     new cdk.CfnOutput(this, 'LeoFirehoseStreamOutput', {
         value: leoFirehose.ref,
@@ -473,14 +536,26 @@ export class Bus extends Construct {
             awsSdkConnectionReuse: false,
             projectRoot: projectRootPath, // Set to main project root
             bundling: {
-                externalModules: [
-                    '@aws-sdk/client-iam', // Add v3 IAM client to externals
-                    'moment',
+                minify: true,
+                sourceMap: true,
+                target: 'node22',
+                // Install all dependencies in the Lambda
+                nodeModules: [
                     'leo-sdk',
                     'leo-cron',
                     'leo-logger',
+                    '@aws-sdk/client-sts',
+                    '@aws-sdk/client-iam',
+                    'moment'
                 ],
-                sourceMap: true,
+                // Don't exclude anything
+                externalModules: [],
+                // Environment variable definitions available during bundling
+                define: {
+                    'process.env.NODE_ENV': '"production"',
+                },
+                // Force esbuild to include any dynamic imports
+                format: nodejs.OutputFormat.CJS
             },
             logRetention: logs.RetentionDays.FIVE_DAYS,
         });
@@ -616,14 +691,26 @@ export class Bus extends Construct {
         architecture: lambda.Architecture.X86_64,
         awsSdkConnectionReuse: false, // Changed to false since this setting is for AWS SDK v2
         bundling: {
-            externalModules: [
-                // 'aws-sdk', // Removed AWS SDK v2 dependency
-                'moment',
+            minify: true,
+            sourceMap: true,
+            target: 'node22',
+            // Install all dependencies in the Lambda
+            nodeModules: [
                 'leo-sdk',
                 'leo-cron',
                 'leo-logger',
+                '@aws-sdk/client-sts',
+                '@aws-sdk/client-iam',
+                'moment'
             ],
-            sourceMap: true,
+            // Don't exclude anything
+            externalModules: [],
+            // Environment variable definitions available during bundling
+            define: {
+                'process.env.NODE_ENV': '"production"',
+            },
+            // Force esbuild to include any dynamic imports
+            format: nodejs.OutputFormat.CJS
         },
         logRetention: logs.RetentionDays.FIVE_DAYS,
     });

@@ -128,8 +128,24 @@ export class Auth extends Construct {
               "dynamodb:DescribeStream", "dynamodb:ListStreams"
             ],
             resources: [
+               // Include table ARNs
                Fn.sub('arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${stackName}-LeoAuth*',
                  { stackName: Stack.of(this).stackName }
+               ),
+               // Explicitly include stream ARNs
+               Fn.sub('arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${stackName}-${id}-LeoAuthPolicy-${env}/stream/*',
+                 { 
+                   stackName: Stack.of(this).stackName,
+                   id: id.toLowerCase(),
+                   env: props.environmentName
+                 }
+               ),
+               Fn.sub('arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/${stackName}-${id}-LeoAuthIdentity-${env}/stream/*',
+                 { 
+                   stackName: Stack.of(this).stackName, 
+                   id: id.toLowerCase(),
+                   env: props.environmentName
+                 }
                )
             ],
           })
@@ -187,15 +203,19 @@ export class Auth extends Construct {
       environment,
       role: leoAuthRole,
       bundling: {
-          externalModules: [
+          externalModules: [],
+          nodeModules: [
               'leo-config', 'leo-aws', 'leo-logger'
           ],
-          nodeModules: [],
           sourceMap: true,
       },
       logRetention: RetentionDays.ONE_WEEK,
       timeout: Duration.minutes(1),
     });
+    
+    // Explicitly grant access to the table and its stream
+    leoAuthPolicy.grantStreamRead(normalizeDataLambda);
+    leoAuthIdentity.grantStreamRead(normalizeDataLambda);
     
     normalizeDataLambda.addEventSourceMapping("LeoAuthPolicyEventSource", {
       eventSourceArn: leoAuthPolicy.tableStreamArn!,
@@ -204,7 +224,9 @@ export class Auth extends Construct {
       startingPosition: StartingPosition.TRIM_HORIZON,
     });
     
-
+    // Add explicit dependency on the table to ensure stream is fully created
+    normalizeDataLambda.node.addDependency(leoAuthPolicy);
+    
     new Rule(this, "ScheduleDataNormalization", {
       ruleName: Fn.join('-', [stack.stackName, id, 'ScheduleDataNormalizationRule', props.environmentName]),
       schedule: Schedule.cron({ minute: "*" }),
@@ -220,10 +242,10 @@ export class Auth extends Construct {
       timeout: Duration.seconds(30),
       role: leoAuthRole,
       bundling: {
-          externalModules: [
+          externalModules: [],
+          nodeModules: [
               'leo-config', 'leo-aws', 'leo-logger'
           ],
-          nodeModules: [],
           sourceMap: true,
       },
        logRetention: RetentionDays.ONE_WEEK,
@@ -258,10 +280,10 @@ export class Auth extends Construct {
       environment,
       role: apiRole,
       bundling: {
-          externalModules: [
+          externalModules: [],
+          nodeModules: [
               'leo-config', 'leo-auth'
           ],
-          nodeModules: [],
           sourceMap: true,
       },
       logRetention: RetentionDays.ONE_WEEK,

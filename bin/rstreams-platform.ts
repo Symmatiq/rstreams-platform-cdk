@@ -4,7 +4,10 @@ import * as cdk from 'aws-cdk-lib';
 import { RStreamsPlatformStack } from '../lib/rstreams-platform-stack';
 
 const app = new cdk.App();
-new RStreamsPlatformStack(app, 'RStreamsPlatformStack', {
+// Get the stack name from context or use a default
+const stackName = app.node.tryGetContext('stack-name') || 'RStreamsPlatformStack';
+
+new RStreamsPlatformStack(app, stackName, {
   /* If you don't specify 'env', this stack will be environment-agnostic. */
   env: {
     account: process.env.CDK_DEFAULT_ACCOUNT,

@@ -65,6 +65,9 @@ export class Auth extends Construct {
       partitionKey: { name: "identity", type: AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
       billingMode: BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true
+      },
     });
     this.leoAuthTable = leoAuth;
 
@@ -73,6 +76,9 @@ export class Auth extends Construct {
       partitionKey: { name: "identity_id", type: AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
       billingMode: BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true
+      },
     });
     this.leoAuthUserTable = leoAuthUser;
 
@@ -82,6 +88,9 @@ export class Auth extends Construct {
       removalPolicy: RemovalPolicy.DESTROY,
       billingMode: BillingMode.PAY_PER_REQUEST,
       stream: StreamViewType.NEW_IMAGE,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true
+      },
     });
     this.leoAuthPolicyTable = leoAuthPolicy;
 
@@ -92,6 +101,9 @@ export class Auth extends Construct {
       sortKey: { name: "policy", type: AttributeType.STRING },
       billingMode: BillingMode.PAY_PER_REQUEST,
       stream: StreamViewType.KEYS_ONLY,
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true
+      },
     });
     this.leoAuthIdentityTable = leoAuthIdentity;
 

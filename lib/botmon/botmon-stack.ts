@@ -97,6 +97,9 @@ export class Botmon extends Construct {
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.DESTROY,
         stream: dynamodb.StreamViewType.NEW_AND_OLD_IMAGES, // Added stream
+        pointInTimeRecoverySpecification: {
+          pointInTimeRecoveryEnabled: true
+        },
     });
     // Add GSI
     this.leoStatsTable.addGlobalSecondaryIndex({

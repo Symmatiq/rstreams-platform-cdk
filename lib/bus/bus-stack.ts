@@ -116,9 +116,14 @@ export class Bus extends Construct {
 
     // 1. S3 Bucket (LeoS3)
     const leoS3 = new s3.Bucket(this, 'leos3', {
-      bucketName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 's3', props.environmentName.toLowerCase()]), // Ensure unique name and all lowercase
-      removalPolicy: cdk.RemovalPolicy.RETAIN, // Or DESTROY depending on requirements
-      // Add versioning, encryption, lifecycle rules as needed from CFN
+      bucketName: cdk.Fn.join('-', [
+        stack.stackName.toLowerCase(), 
+        id.toLowerCase(), 
+        's3', 
+        props.environmentName.toLowerCase(),
+        stack.account.substring(0, 8) // Add AWS account ID suffix to make unique
+      ]), 
+      removalPolicy: cdk.RemovalPolicy.RETAIN,
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -138,7 +143,9 @@ export class Bus extends Construct {
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
         removalPolicy: cdk.RemovalPolicy.DESTROY, // Make configurable if needed
         stream: stream,
-        pointInTimeRecovery: true, // Enable PITR by default
+        pointInTimeRecoverySpecification: {
+          pointInTimeRecoveryEnabled: true 
+        },
       });
       new cdk.CfnOutput(this, `${tableName}Output`, {
           value: table.tableName,

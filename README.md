@@ -55,6 +55,8 @@ The application can be configured via the `cdk.json` file or by providing contex
 
 ## Deployment
 
+### AWS Cloud Deployment
+
 To deploy the stack to your default AWS account/region:
 
 ```
@@ -71,6 +73,170 @@ To deploy with queue replication enabled:
 
 ```
 cdk deploy --context queueReplication='{"source": {"region": "us-east-1", "accountId": "1234567890"}, "destination": {"region": "us-west-2", "accountId": "0987654321"}}'
+```
+
+To deploy a specific stack only:
+
+```
+cdk deploy MyStackName
+```
+
+To deploy with approval disabled (use cautiously):
+
+```
+cdk deploy --require-approval never
+```
+
+### LocalStack Deployment
+
+[LocalStack](https://localstack.cloud/) provides a local AWS cloud stack for development and testing. Follow these steps to deploy the RStreams platform on LocalStack:
+
+1. **Install and Start LocalStack**:
+   ```
+   npm install -g localstack
+   localstack start
+   ```
+
+   Or using Docker:
+   ```
+   docker run --name localstack -p 4566:4566 -p 4510-4559:4510-4559 localstack/localstack
+   ```
+
+2. **Install the CDK LocalStack Toolkit**:
+   ```
+   npm install -g aws-cdk-local aws-cdk-lib
+   ```
+
+3. **Configure AWS CLI for LocalStack**:
+   ```
+   aws configure --profile localstack
+   AWS Access Key ID [None]: test
+   AWS Secret Access Key [None]: test
+   Default region name [None]: us-east-1
+   Default output format [None]: json
+   ```
+
+4. **Bootstrap CDK for LocalStack**:
+   ```
+   cdklocal bootstrap aws://000000000000/us-east-1 --profile localstack
+   ```
+
+5. **Deploy to LocalStack**:
+   ```
+   cdklocal deploy --profile localstack
+   ```
+
+   Or with specific context parameters:
+   ```
+   cdklocal deploy --context environment=dev --profile localstack
+   ```
+
+6. **Verify Deployment**:
+   ```
+   aws --endpoint-url=http://localhost:4566 cloudformation list-stacks --profile localstack
+   ```
+
+#### LocalStack Limitations
+
+- Some AWS services may not be fully supported in LocalStack's free tier
+- Cognito User Pools have limited functionality in LocalStack
+- Cross-region replication features may not work as expected in LocalStack
+
+### Programmatic Deployment
+
+You can deploy the stack programmatically using AWS SDK and CDK API.
+
+#### Deploy to AWS Cloud
+
+```javascript
+const { execSync } = require('child_process');
+
+function deployCdkStack(stackName, environment, region) {
+  console.log(`Deploying stack ${stackName} to ${environment} in ${region}...`);
+  
+  try {
+    const command = `cdk deploy ${stackName} --context environment=${environment} --region ${region}`;
+    execSync(command, { stdio: 'inherit' });
+    
+    console.log(`Stack ${stackName} deployed successfully!`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to deploy stack ${stackName}:`, error);
+    return false;
+  }
+}
+
+// Example usage
+deployCdkStack('RStreamsPlatformStack', 'dev', 'us-east-1');
+```
+
+#### Deploy to LocalStack
+
+```javascript
+const { execSync } = require('child_process');
+
+function deployToLocalStack(stackName, environment) {
+  console.log(`Deploying ${stackName} to LocalStack in ${environment} environment...`);
+  
+  try {
+    const command = `cdklocal deploy ${stackName} --context environment=${environment} --profile localstack`;
+    execSync(command, { stdio: 'inherit' });
+    
+    console.log(`Stack ${stackName} deployed successfully to LocalStack!`);
+    return true;
+  } catch (error) {
+    console.error(`Failed to deploy stack ${stackName} to LocalStack:`, error);
+    return false;
+  }
+}
+
+// Example usage
+deployToLocalStack('RStreamsPlatformStack', 'local');
+```
+
+#### Deploy Using CDK API
+
+```javascript
+const cdk = require('aws-cdk-lib');
+const { RStreamsPlatformStack } = require('./lib/rstreams-platform-stack');
+
+async function deployWithCdkApi(environment, region, account) {
+  // Create CDK app
+  const app = new cdk.App({
+    context: {
+      environment: environment
+    }
+  });
+  
+  // Create stack with configuration
+  const stack = new RStreamsPlatformStack(app, 'RStreamsPlatform', {
+    environmentName: environment,
+    env: {
+      region: region,
+      account: account
+    }
+  });
+  
+  // Synthesize CloudFormation template
+  const assembly = app.synth();
+  
+  // Deploy using CloudFormation API
+  const cfn = new cdk.aws_cloudformation.CloudFormation({
+    region: region,
+    credentials: { /* your credentials here */ }
+  });
+  
+  await cfn.createOrUpdateStack({
+    stackName: stack.stackName,
+    templateBody: assembly.getStackByName(stack.stackName).template,
+    capabilities: ['CAPABILITY_IAM', 'CAPABILITY_NAMED_IAM', 'CAPABILITY_AUTO_EXPAND']
+  }).promise();
+  
+  console.log(`Stack ${stack.stackName} deployed successfully!`);
+}
+
+// Example usage
+deployWithCdkApi('dev', 'us-east-1', '123456789012').catch(console.error);
 ```
 
 ### Custom Stack Names

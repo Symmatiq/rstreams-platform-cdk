@@ -62,6 +62,14 @@ export class RStreamsPlatformStack extends cdk.Stack {
     // Get queue replication mapping configuration
     const queueReplicationMapping = this.node.tryGetContext('queueReplicationMapping') || '[]';
 
+    // Detect LocalStack environment
+    const isLocalStack = this.account === '000000000000' || 
+                         this.region === 'local' ||
+                         process.env.LOCALSTACK_HOSTNAME !== undefined ||
+                         process.env.CDK_LOCAL === 'true';
+    
+    console.log(`STACK: Detected environment: account=${this.account}, region=${this.region}, isLocalStack=${isLocalStack}`);
+
     // Instantiate new Bus construct with all parameters from original CloudFormation
     const bus = new Bus(this, 'Bus', {
       environmentName: environmentName,
@@ -79,7 +87,9 @@ export class RStreamsPlatformStack extends cdk.Stack {
       lambdaInvokePolicy: this.node.tryGetContext('lambdaInvokePolicy'),
       kinesisShards: this.node.tryGetContext('kinesisShards') || 1,
       streamTTLSeconds: this.node.tryGetContext('streamTTLSeconds') || 604800,
-      monitorShardHashKey: this.node.tryGetContext('monitorShardHashKey') || 0
+      monitorShardHashKey: this.node.tryGetContext('monitorShardHashKey') || 0,
+      // Skip Firehose resource for LocalStack
+      skipForLocalStack: isLocalStack ? { firehose: true } : undefined
     });
 
     // Get custom JS and logins for Botmon UI customization

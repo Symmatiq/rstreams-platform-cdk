@@ -82,6 +82,13 @@ export interface BusProps {
    */
   exportNamePrefix?: string;
 
+  /**
+   * Flag to skip creation of specific resources for LocalStack compatibility.
+   */
+  skipForLocalStack?: {
+    firehose?: boolean;
+  };
+
   stack?: cdk.Stack;
   isTrustingAccount?: boolean;
 }
@@ -118,6 +125,17 @@ export class Bus extends Construct {
     // Define resource names upfront to ensure consistency
     const kinesisStreamName = createTruncatedName(stack.stackName, id, 'kinesis', props.environmentName);
     const firehoseStreamName = createTruncatedName(stack.stackName, id, 'firehose', props.environmentName);
+    
+    // LocalStack detection - check account ID and region
+    const isLocalStack = stack.account === '000000000000' || 
+                         stack.region === 'local' ||
+                         process.env.LOCALSTACK_HOSTNAME !== undefined ||
+                         process.env.CDK_LOCAL === 'true';
+    
+    console.log(`Detected environment: account=${stack.account}, region=${stack.region}, isLocalStack=${isLocalStack}`);
+    
+    // Determine if we should skip certain resources
+    const skipFirehose = isLocalStack && (props.skipForLocalStack?.firehose !== false);
     
     // Important workaround: Use a hardcoded ARN to a known working Kinesis stream 
     // to avoid the permissions propagation issue with newly created streams
@@ -415,43 +433,82 @@ export class Bus extends Construct {
     this.leoS3Bucket.grantReadWrite(firehoseDeliveryRole);
     this.leoKinesisStream.grantRead(firehoseDeliveryRole);
 
-    const leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
-        deliveryStreamType: 'KinesisStreamAsSource',
-        kinesisStreamSourceConfiguration: {
-            kinesisStreamArn: existingKinesisStreamArn,
-            roleArn: firehoseDeliveryRole.roleArn
-        },
-        s3DestinationConfiguration: {
-            bucketArn: this.leoS3Bucket.bucketArn,
-            roleArn: firehoseDeliveryRole.roleArn,
-            prefix: 'firehose/',
-            errorOutputPrefix: 'firehose-errors/',
-            bufferingHints: {
-                intervalInSeconds: 300,
-                sizeInMBs: 5
-            },
-            compressionFormat: 'GZIP',
-            cloudWatchLoggingOptions: {
-                enabled: true,
-                logGroupName: `/aws/kinesisfirehose/${firehoseStreamName}`,
-                logStreamName: 'S3Delivery'
-            }
+    // Setup Firehose stream differently based on environment
+    let leoFirehose: firehose.CfnDeliveryStream;
+    
+    if (skipFirehose) {
+        console.log("Skipping Firehose creation for LocalStack compatibility");
+        // Create a dummy reference instead of a real resource
+        this.leoFirehoseStreamName = firehoseStreamName;
+        
+        // Define a dummy output for compatibility
+        new cdk.CfnOutput(this, 'LeoFirehoseStreamOutput', {
+            value: firehoseStreamName,
+            exportName: `${exportPrefix}-LeoFirehoseStream`
+        });
+        
+        new cdk.CfnOutput(this, 'LeoFirehoseStreamNameOutput', {
+            value: firehoseStreamName,
+            exportName: `${exportPrefix}-LeoFirehoseStreamName`
+        });
+    } else {
+        // Setup the real Firehose stream based on environment
+        if (isLocalStack) {
+            // Simplified config for LocalStack with minimal required properties
+            leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
+                deliveryStreamName: firehoseStreamName,
+                deliveryStreamType: 'KinesisStreamAsSource',
+                kinesisStreamSourceConfiguration: {
+                    kinesisStreamArn: this.leoKinesisStream.streamArn, // Use actual stream ARN
+                    roleArn: firehoseDeliveryRole.roleArn
+                },
+                s3DestinationConfiguration: {
+                    bucketArn: this.leoS3Bucket.bucketArn,
+                    roleArn: firehoseDeliveryRole.roleArn,
+                    prefix: 'firehose/'
+                }
+            });
+        } else {
+            // Full configuration for AWS
+            leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
+                deliveryStreamType: 'KinesisStreamAsSource',
+                kinesisStreamSourceConfiguration: {
+                    kinesisStreamArn: existingKinesisStreamArn,
+                    roleArn: firehoseDeliveryRole.roleArn
+                },
+                s3DestinationConfiguration: {
+                    bucketArn: this.leoS3Bucket.bucketArn,
+                    roleArn: firehoseDeliveryRole.roleArn,
+                    prefix: 'firehose/',
+                    errorOutputPrefix: 'firehose-errors/',
+                    bufferingHints: {
+                        intervalInSeconds: 300,
+                        sizeInMBs: 5
+                    },
+                    compressionFormat: 'GZIP',
+                    cloudWatchLoggingOptions: {
+                        enabled: true,
+                        logGroupName: `/aws/kinesisfirehose/${firehoseStreamName}`,
+                        logStreamName: 'S3Delivery'
+                    }
+                }
+            });
         }
-    });
 
-    this.leoFirehoseStreamName = leoFirehose.ref; // Assign Firehose name to property
+        this.leoFirehoseStreamName = leoFirehose.ref; // Assign Firehose name to property
 
-    // Add explicit dependency to ensure the role is fully created before Firehose
-    leoFirehose.node.addDependency(firehoseDeliveryRole);
+        // Add explicit dependency to ensure the role is fully created before Firehose
+        leoFirehose.node.addDependency(firehoseDeliveryRole);
 
-    new cdk.CfnOutput(this, 'LeoFirehoseStreamOutput', {
-        value: leoFirehose.ref,
-        exportName: `${exportPrefix}-LeoFirehoseStream`
-    });
-    new cdk.CfnOutput(this, 'LeoFirehoseStreamNameOutput', { // Optionally export name too
-        value: this.leoFirehoseStreamName,
-        exportName: `${exportPrefix}-LeoFirehoseStreamName`
-    });
+        new cdk.CfnOutput(this, 'LeoFirehoseStreamOutput', {
+            value: leoFirehose.ref,
+            exportName: `${exportPrefix}-LeoFirehoseStream`
+        });
+        new cdk.CfnOutput(this, 'LeoFirehoseStreamNameOutput', { // Optionally export name too
+            value: this.leoFirehoseStreamName,
+            exportName: `${exportPrefix}-LeoFirehoseStreamName`
+        });
+    }
 
     // 6. Lambda Functions (Update roles)
     const busLambdaEnvironment = {
@@ -464,7 +521,7 @@ export class Bus extends Construct {
         LEO_SYSTEM_TABLE: this.leoSystemTable.tableName,
         LEO_KINESIS_STREAM: this.leoKinesisStream.streamName,
         LEO_S3_BUCKET: this.leoS3Bucket.bucketName,
-        FIREHOSE_STREAM: leoFirehose.ref, // Pass Firehose name
+        FIREHOSE_STREAM: this.leoFirehoseStreamName, // Pass Firehose name
         // BUS_STACK_NAME needs to be determined - using exportPrefix for now
         BUS_STACK_NAME: exportPrefix,
         NODE_OPTIONS: '--enable-source-maps', // Enable source maps

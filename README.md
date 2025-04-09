@@ -15,7 +15,7 @@ The infrastructure consists of:
 
 ## Key Features
 
-- **Queue Replication** - Supports replication between source and destination queues
+- **Queue Replication** - Supports replication between queues in different AWS accounts
 - **Runtime Configuration** - Configurable Lambda runtimes to stay current with AWS requirements
 - **Resource Naming Strategy** - Prevents name collisions when deploying to the same region
 - **Existing Resource Integration** - Can integrate with existing Cognito identity pools
@@ -23,7 +23,7 @@ The infrastructure consists of:
 
 ## Prerequisites
 
-- Node.js 14.x or later
+- Node.js 22.x or later
 - AWS CLI configured with appropriate credentials
 - AWS CDK installed globally: `npm install -g aws-cdk`
 
@@ -46,12 +46,7 @@ The application can be configured via the `cdk.json` file or by providing contex
 - `environment` - The environment name (dev, staging, prod)
 - `useExistingIdentityPool` - Set to true to use an existing Cognito identity pool
 - `existingIdentityPoolId` - ID of the existing Cognito identity pool (when useExistingIdentityPool is true)
-- `lambdaRuntime` - Override the default Lambda runtime
 - `queueReplication` - Configure source and destination queue replication settings
-- Various capacity settings for DynamoDB tables:
-  - `leoStreamMinReadCapacity`/`leoStreamMaxReadCapacity` 
-  - `leoStreamMinWriteCapacity`/`leoStreamMaxWriteCapacity`
-  - etc.
 
 ## Deployment
 
@@ -64,7 +59,7 @@ cdk deploy
 To deploy with specific parameters:
 
 ```
-cdk deploy --context environment=production --context leoStreamMinReadCapacity=40
+cdk deploy --context environment=production --context stack-name=SymmatiqBackend
 ```
 
 To deploy with queue replication enabled:
@@ -268,20 +263,3 @@ The CDK implementation handles resource naming to prevent collisions when deploy
 
 This infrastructure follows AWS best practices for security. The IAM roles created have the minimum required permissions to function. The ApiRole construct provides a standardized approach to Lambda role creation with appropriate permissions.
 
-## Customization
-
-To customize the infrastructure, modify the appropriate files in the `lib/` directory:
-
-- `rstreams-platform-stack.ts` - Main stack definition
-- `constructs/` directory - Individual components like Auth, Bus, etc.
-- `helpers/` directory - Utility functions and mappings
-
-## Migration from CloudFormation
-
-This CDK project is a direct port of the original CloudFormation template. It maintains all the same resources, configurations, and dependencies, but takes advantage of CDK's programming model for better maintainability.
-
-## Troubleshooting
-
-- **IAM Role Name Length Issues** - If you encounter IAM role name length errors, the stack uses name truncation helpers to ensure names stay within AWS limits
-- **Missing Export Errors** - Ensure all required exports exist in the destination region when using cross-region functionality
-- **DynamoDB Capacity** - Tune the DynamoDB capacity settings based on your workload requirements

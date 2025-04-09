@@ -116,8 +116,8 @@ export class Bus extends Construct {
     const uniqueSuffix = String(Math.floor(Date.now() / 1000) % 1000000);
     
     // Define resource names upfront to ensure consistency
-    const kinesisStreamName = cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'kinesis', props.environmentName.toLowerCase(), uniqueSuffix]);
-    const firehoseStreamName = cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'firehose', props.environmentName.toLowerCase(), uniqueSuffix]);
+    const kinesisStreamName = createTruncatedName(stack.stackName, id, 'kinesis', props.environmentName);
+    const firehoseStreamName = createTruncatedName(stack.stackName, id, 'firehose', props.environmentName);
     
     // Important workaround: Use a hardcoded ARN to a known working Kinesis stream 
     // to avoid the permissions propagation issue with newly created streams
@@ -130,14 +130,6 @@ export class Bus extends Construct {
 
     // 1. S3 Bucket (LeoS3)
     const leoS3 = new s3.Bucket(this, 'leos3', {
-      bucketName: cdk.Fn.join('-', [
-        stack.stackName.toLowerCase(), 
-        id.toLowerCase(), 
-        's3', 
-        props.environmentName.toLowerCase(),
-        stack.account.substring(0, 8), // Add AWS account ID suffix to make unique
-        uniqueSuffix // Add timestamp to ensure uniqueness
-      ]), 
       removalPolicy: cdk.RemovalPolicy.RETAIN,
       versioned: true,
       encryption: s3.BucketEncryption.S3_MANAGED,
@@ -152,7 +144,6 @@ export class Bus extends Construct {
     // 2. DynamoDB Tables (LeoStream, LeoArchive, LeoEvent, LeoSettings, LeoCron, LeoSystem)
     const createLeoTable = (tableName: string, partitionKey: dynamodb.Attribute, sortKey?: dynamodb.Attribute, stream?: dynamodb.StreamViewType): dynamodb.Table => {
       const table = new dynamodb.Table(this, tableName, {
-        tableName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), tableName, props.environmentName]),
         partitionKey: partitionKey,
         sortKey: sortKey,
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -186,7 +177,6 @@ export class Bus extends Construct {
 
     // 3. Kinesis Stream (LeoKinesisStream)
     const leoKinesis = new kinesis.Stream(this, 'leokinesisstream', {
-      streamName: kinesisStreamName,
       shardCount: props.kinesisShards ?? 1,
       streamMode: props.kinesisShards ? kinesis.StreamMode.PROVISIONED : kinesis.StreamMode.ON_DEMAND,
     });
@@ -200,7 +190,6 @@ export class Bus extends Construct {
 
     // LeoBotPolicy (Managed Policy based on CFN)
     const botPolicy = new iam.ManagedPolicy(this, 'LeoBotPolicy', {
-        managedPolicyName: createTruncatedName(stack.stackName, id, 'LeoBotPolicy', props.environmentName),
         description: 'Common policy for Leo Bus Lambdas',
         statements: [
             new iam.PolicyStatement({ // Allow writing to LeoCron
@@ -273,7 +262,6 @@ export class Bus extends Construct {
     // Role Creation Helper
     const createBusRole = (roleId: string, principal: iam.IPrincipal, additionalPolicies?: iam.PolicyStatement[], managedPoliciesToAdd?: iam.IManagedPolicy[]): iam.Role => {
         const role = new iam.Role(this, roleId, {
-            roleName: createTruncatedName(stack.stackName, id, roleId, props.environmentName),
             assumedBy: principal,
             managedPolicies: [
                 iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
@@ -373,7 +361,6 @@ export class Bus extends Construct {
 
     // 5. Firehose Delivery Stream (using its own role `firehoseDeliveryRole` defined below)
     const firehoseDeliveryRole = new iam.Role(this, 'FirehoseDeliveryRole', {
-        roleName: createTruncatedName(stack.stackName, id, 'FirehoseRole', props.environmentName),
         assumedBy: new iam.ServicePrincipal('firehose.amazonaws.com'),
     });
 
@@ -429,7 +416,6 @@ export class Bus extends Construct {
     this.leoKinesisStream.grantRead(firehoseDeliveryRole);
 
     const leoFirehose = new firehose.CfnDeliveryStream(this, 'leofirehosestream', {
-        deliveryStreamName: firehoseStreamName,
         deliveryStreamType: 'KinesisStreamAsSource',
         kinesisStreamSourceConfiguration: {
             kinesisStreamArn: existingKinesisStreamArn,
@@ -525,7 +511,6 @@ export class Bus extends Construct {
             runtime: lambda.Runtime.NODEJS_22_X, // Updated to Node.js 22 runtime
             entry: entryPath,
             handler: 'handler',
-            functionName: functionName,
             role: role,
             environment: {
                 ...(environment || {}),
@@ -675,48 +660,23 @@ export class Bus extends Construct {
     // Grant necessary permissions (e.g., S3 write to archive bucket if separate)
     this.leoS3Bucket.grantReadWrite(archiveLambda);
 
-    // LeoEventTrigger - Defined directly to isolate from helper issues
-    const leoEventTriggerLambda = new nodejs.NodejsFunction(this, 'LeoEventTrigger', {
-        runtime: lambda.Runtime.NODEJS_22_X, // Updated to Node.js 22 runtime
-        entry: path.resolve(__dirname, '../../lambda/bus/event-trigger/index.js'),
-        handler: 'handler',
-        functionName: createTruncatedName(stack.stackName, 'event-trigger', '', props.environmentName),
-        role: this.leoCronRole,
-        environment: {
-            ...busLambdaEnvironment,
+    // LeoEventTrigger
+    const leoEventTriggerLambda = createBusLambda(
+        this,
+        'LeoEventTrigger',
+        'event-trigger',
+        this.leoCronRole,
+        {
             // Add any specific environment variables if needed
+            QueueReplicationMapping: props.queueReplicationMapping || '[]',
+            QueueReplicationDestinationLeoBotRoleARNs: props.queueReplicationDestinations
+              ? props.queueReplicationDestinations.join(',')
+              : '' // Changed undefined to empty string to match string type
         },
-        timeout: cdk.Duration.minutes(5),
-        memorySize: 1024,
-        architecture: lambda.Architecture.X86_64,
-        awsSdkConnectionReuse: false, // Changed to false since this setting is for AWS SDK v2
-        bundling: {
-            minify: true,
-            sourceMap: true,
-            target: 'node22',
-            // Install all dependencies in the Lambda
-            nodeModules: [
-                'leo-sdk',
-                'leo-cron',
-                'leo-logger',
-                '@aws-sdk/client-sts',
-                '@aws-sdk/client-iam',
-                'moment'
-            ],
-            // Don't exclude anything
-            externalModules: [],
-            // Environment variable definitions available during bundling
-            define: {
-                'process.env.NODE_ENV': '"production"',
-            },
-            // Force esbuild to include any dynamic imports
-            format: nodejs.OutputFormat.CJS
-        },
-        logRetention: logs.RetentionDays.FIVE_DAYS,
-    });
-    cdk.Tags.of(leoEventTriggerLambda).add('Stack', exportPrefix);
-    cdk.Tags.of(leoEventTriggerLambda).add('Construct', 'Lambda');
-
+        cdk.Duration.minutes(5),
+        1024
+    );
+    
     // Add DynamoDB Event Source Mapping for LeoEvent table
     leoEventTriggerLambda.addEventSourceMapping('EventTableSource', {
         eventSourceArn: this.leoEventTable.tableStreamArn!,
@@ -724,7 +684,7 @@ export class Bus extends Construct {
         batchSize: 500 // Match CFN
     });
 
-    // Define the type for installEnv explicitly - Re-added
+    // Define the type for installEnv explicitly
     interface InstallEnvType {
         APP_TABLE: string;
         SYSTEM_TABLE: string;
@@ -758,7 +718,7 @@ export class Bus extends Construct {
         LEO_FIREHOSE_ROLE_ARN: this.leoFirehoseRole.roleArn,
     };
     // Dependencies for environment variables - Assign after lambda definitions
-    installEnv['LEO_EVENT_TRIGGER_LOGICAL_ID'] = leoEventTriggerLambda.node.id; // Now leoEventTriggerLambda is defined
+    installEnv['LEO_EVENT_TRIGGER_LOGICAL_ID'] = leoEventTriggerLambda.node.id;
     installEnv['LEO_S3_LOAD_TRIGGER_ARN'] = s3LoadTriggerLambda.functionArn;
     installEnv['LEO_CRON_PROCESSOR_ARN'] = cronProcessorLambda.functionArn;
     installEnv['LEO_KINESIS_PROCESSOR_ARN'] = kinesisProcessorLambda.functionArn;
@@ -787,56 +747,60 @@ export class Bus extends Construct {
         'CronScheduler',
         'cron-scheduler',
         this.leoCronRole,
-        {}, // No specific env vars from CFN
+        {},
         cdk.Duration.minutes(5),
-        1536 // Memory/Timeout from CFN
+        1536
     );
-    this.leoCronTable.grantReadWriteData(cronSchedulerLambda); // Needs to read/write cron jobs
-    // Needs EventBridge trigger (see LeoCronSchedule rule in CFN)
+    this.leoCronTable.grantReadWriteData(cronSchedulerLambda);
 
     // BusApiProcessor (Lambda for API Gateway)
     const busApiLambda = createBusLambda(
         this,
         'BusApiProcessor',
         'bus-api',
-        this.leoBotRole, // Uses generic LeoBotRole
-        {}, // No specific env vars from CFN
+        this.leoBotRole,
+        {},
         cdk.Duration.minutes(5),
-        1536 // Memory/Timeout from CFN
+        1536
     );
-    // Grant permissions based on API needs (e.g., DynamoDB access)
+    
+    // Add SourceQueueReplicator Lambda instead of the ReplicateLambda
+    const sourceQueueReplicatorLambda = createBusLambda(
+        this,
+        'SourceQueueReplicator',
+        'source-queue-replicator',
+        this.leoBotRole,
+        {
+            QueueReplicationMapping: props.queueReplicationMapping || '[]',
+            QueueReplicationDestinationLeoBotRoleARNs: props.queueReplicationDestinations
+                ? props.queueReplicationDestinations.join(',')
+                : ''
+        },
+        cdk.Duration.minutes(5),
+        256
+    );
+    
+    // Add the STS AssumeRole permission if trusted ARNs are provided
+    if (props.trustedArns) {
+        sourceQueueReplicatorLambda.addToRolePolicy(new iam.PolicyStatement({
+            actions: ['sts:AssumeRole'],
+            resources: props.trustedArns
+        }));
+    }
+    
+    // Grant permissions to write to the Kinesis stream
+    this.leoKinesisStream.grantWrite(sourceQueueReplicatorLambda);
 
     // CreateReplicationBots (Lambda for Custom Resource)
     const createReplicationBotsLambda = createBusLambda(
         this,
         'CreateReplicationBots',
         'create-replication-bots',
-        this.leoInstallRole, // Uses LeoInstallRole in CFN
-        {}, // No specific env vars from CFN
+        this.leoInstallRole,
+        {},
         cdk.Duration.minutes(5),
-        1536 // Memory/Timeout from CFN
+        1536
     );
-    // Grant permissions (e.g., to create other resources if needed)
-
-    // Create replicator Lambda used by the replication bots
-    const replicateLambda = createBusLambda(
-        this,
-        'ReplicateLambda',
-        'replicate',
-        this.leoBotRole,
-        {}, // No specific env vars
-        cdk.Duration.minutes(5),
-        1536 // Memory size
-    );
-    // Grant permissions to access other accounts if needed
-    if (props.trustedArns) {
-        replicateLambda.addToRolePolicy(new iam.PolicyStatement({
-            actions: ['sts:AssumeRole'],
-            resources: props.trustedArns
-        }));
-    }
-    // Allow writing to kinesis stream
-    this.leoKinesisStream.grantWrite(replicateLambda);
 
     // Custom Resource for Registering Replication Bots
     const registerBotsProvider = new cr.Provider(this, 'RegisterBotsProvider', {
@@ -852,16 +816,34 @@ export class Bus extends Construct {
         exportName: `${exportPrefix}-Register`
     });
 
-    new cdk.CustomResource(this, 'RegisterReplicationBots', {
-        serviceToken: registerBotsProvider.serviceToken,
-        properties: {
-            // Properties required by the createReplicationBotsLambda function based on original implementation
-            QueueReplicationMapping: props.queueReplicationMapping || '[]',
-            QueueReplicationDestinationLeoBotRoleARNs: props.queueReplicationDestinations 
-              ? props.queueReplicationDestinations.join(',') 
-              : undefined,
-            ReplicatorLambdaName: createTruncatedName(stack.stackName, 'replicatelambda', '', props.environmentName)
-        },
+    // Custom resource for registering replication bots
+    const RegisterReplicationBots = new cdk.CustomResource(this, 'RegisterReplicationBots', {
+      serviceToken: createReplicationBotsLambda.functionArn,
+      properties: {
+        lambdaArn: sourceQueueReplicatorLambda.functionArn,
+        Events: JSON.stringify([
+          {
+            "event": "system.stats",
+            "botId": "Stats_Processor",
+            "source": "Leo_Stats"
+          }
+        ]),
+        GenericBots: JSON.stringify([]),
+        LeoSdkConfig: JSON.stringify({
+          resources: {
+            LeoStream: this.leoStreamTable.tableName,
+            LeoCron: this.leoCronTable.tableName,
+            LeoEvent: this.leoEventTable.tableName,
+            LeoSettings: this.leoSettingsTable.tableName,
+            LeoSystem: this.leoSystemTable.tableName,
+            LeoS3: this.leoS3Bucket.bucketName,
+            LeoKinesisStream: this.leoKinesisStream.streamName,
+            LeoFirehoseStream: this.leoFirehoseStreamName,
+            LeoStats: this.leoStreamTable.tableName // Use leoStreamTable temporarily as placeholder
+          },
+          region: cdk.Stack.of(this).region,
+        })
+      }
     });
 
     // 8. Outputs
@@ -876,9 +858,8 @@ export class Bus extends Construct {
     });
 
     // Placeholder for Bus Stack Name export used in Botmon
-    // This might need to be handled differently, maybe passed in props?
     new cdk.CfnOutput(this, 'BusStackNameOutput', {
-        value: exportPrefix, // Using the derived export prefix
+        value: exportPrefix,
         description: 'Name of the Bus stack for reference by other stacks',
         exportName: `${exportPrefix}-BusStackName`
     });

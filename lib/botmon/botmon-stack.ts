@@ -78,7 +78,6 @@ export class Botmon extends Construct {
 
     // 1. Botmon API Gateway (RestApi)
     const api = new apigateway.RestApi(this, 'BotmonRestApi', {
-        restApiName: cdk.Fn.join('-', [stack.stackName, id, 'api', props.environmentName]),
         description: 'Botmon API',
         deployOptions: {
             stageName: props.environmentName,
@@ -91,7 +90,6 @@ export class Botmon extends Construct {
 
     // LeoStats Table (Refined based on CFN)
     this.leoStatsTable = new dynamodb.Table(this, 'LeoStats', {
-        tableName: cdk.Fn.join('-', [stack.stackName, id.toLowerCase(), 'leostats', props.environmentName]),
         partitionKey: { name: 'id', type: dynamodb.AttributeType.STRING },
         sortKey: { name: 'bucket', type: dynamodb.AttributeType.STRING }, // Corrected SK
         billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -114,7 +112,6 @@ export class Botmon extends Construct {
 
     // LeoBotmonRole (Refined based on CFN)
     const leoBotmonRole = new iam.Role(this, 'LeoBotmonRole', {
-        roleName: createTruncatedName(stack.stackName, id, 'BotmonRole', props.environmentName),
         assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
         managedPolicies: [
             iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
@@ -132,7 +129,6 @@ export class Botmon extends Construct {
 
     // ApiRole (Refined based on CFN)
     const apiLambdaRole = new iam.Role(this, 'BotmonApiLambdaRole', {
-        roleName: createTruncatedName(stack.stackName, id, 'ApiLambdaRole', props.environmentName),
         assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
         managedPolicies: [
             iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
@@ -182,7 +178,6 @@ export class Botmon extends Construct {
 
     // LeoBotmonSnsRole (Refined based on CFN)
     const leoBotmonSnsRole = new iam.Role(this, 'LeoBotmonSnsRole', {
-        roleName: createTruncatedName(stack.stackName, id, 'SnsRole', props.environmentName),
         assumedBy: new iam.ServicePrincipal('lambda.amazonaws.com'),
         managedPolicies: [
             iam.ManagedPolicy.fromAwsManagedPolicyName('service-role/AWSLambdaBasicExecutionRole'),
@@ -414,9 +409,7 @@ export class Botmon extends Construct {
     });
 
     // HealthCheck SNS Topic
-    const healthCheckTopic = new sns.Topic(this, 'HealthCheckSNS', {
-        topicName: cdk.Fn.join('-', [stack.stackName, id, 'HealthCheckSNS', props.environmentName]),
-    });
+    const healthCheckTopic = new sns.Topic(this, 'HealthCheckSNS');
     this.healthCheckTopic = healthCheckTopic;
 
     // HealthSNS Lambda (Placeholder - Processes SNS messages from HealthCheckTopic)
@@ -436,29 +429,59 @@ export class Botmon extends Construct {
     // Use the service token directly from the Bus construct instead of importing
     const registerServiceToken = props.bus.installTriggerServiceToken;
 
+    // Explicitly construct the resource and table references for the Leo SDK
+    const leoSdkConfig = {
+      region: stack.region,
+      resources: {
+        LeoStream: props.bus.leoStreamTable.tableName,
+        LeoCron: props.bus.leoCronTable.tableName, 
+        LeoEvent: props.bus.leoEventTable.tableName,
+        LeoSettings: props.bus.leoSettingsTable.tableName,
+        LeoSystem: props.bus.leoSystemTable.tableName,
+        LeoS3: props.bus.leoS3Bucket.bucketName,
+        LeoKinesisStream: props.bus.leoKinesisStream.streamName,
+        LeoFirehoseStream: props.bus.leoFirehoseStreamName,
+        Region: stack.region,
+        LeoStats: this.leoStatsTable.tableName
+      }
+    };
+
+    // Custom Resource for Registering Replication Bots
     new cdk.CustomResource(this, 'LeoRegisterBots', {
         serviceToken: registerServiceToken,
         properties: {
-            // Define the bots to register (StatsProcessor, LeoHealthCheck)
-            StatsProcessor: {
-                id: 'stats_processor',
-                owner: 'leo',
-                settings: {
-                    batch: { size: { count: 1000, time: { seconds: 3 } } },
-                    source: 'queue:monitor' // Assuming this queue name is correct
+            // Define the bots to register in the proper format that the Lambda expects
+            // Pass lambdaArn and other required fields instead of nested objects
+            lambdaArn: statsProcessorLambda.functionArn,
+            Events: JSON.stringify([
+                {
+                    "event": "system.stats",
+                    "botId": "Stats_Processor",
+                    "source": "Leo_Stats"
+                }
+            ]),
+            GenericBots: JSON.stringify([
+                {
+                    id: 'stats_processor',
+                    owner: 'leo',
+                    lambdaArn: statsProcessorLambda.functionArn,
+                    settings: {
+                        batch: { size: { count: 1000, time: { seconds: 3 } } },
+                        source: 'queue:monitor'
+                    },
+                    ignoreMonitor: true,
+                    paused: false
                 },
-                ignoreMonitor: true,
-                paused: false,
-                lambdaName: statsProcessorLambda.functionName
-            },
-            LeoHealthCheck: {
-                id: 'Leo_health_check',
-                owner: 'leo',
-                time: '30 */1 * * * *', // Schedule from CFN
-                paused: false,
-                lambdaName: leoHealthCheckLambda.functionName
-            },
-            UpdateTrigger: new Date().toISOString() // Force update
+                {
+                    id: 'Leo_health_check',
+                    owner: 'leo',
+                    lambdaArn: leoHealthCheckLambda.functionArn,
+                    time: '30 */1 * * * *',
+                    paused: false
+                }
+            ]),
+            LeoSdkConfig: JSON.stringify(leoSdkConfig),
+            UpdateTrigger: new Date().toISOString()
         }
     });
 
@@ -567,13 +590,12 @@ export class Botmon extends Construct {
 
     // 4. S3 Bucket for UI (WebsiteBucket)
     const uiBucket = new s3.Bucket(this, 'websitebucket', {
-        bucketName: cdk.Fn.join('-', [stack.stackName.toLowerCase(), id.toLowerCase(), 'ui', props.environmentName.toLowerCase()]),
         websiteIndexDocument: 'index.html',
         websiteErrorDocument: 'index.html',
-        publicReadAccess: false, // Access via CloudFront OAI
+        publicReadAccess: false,
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
         removalPolicy: cdk.RemovalPolicy.DESTROY,
-        autoDeleteObjects: true, // For easy cleanup in dev
+        autoDeleteObjects: true,
     });
     this.uiBucket = uiBucket;
 
@@ -635,9 +657,6 @@ export class Botmon extends Construct {
       // Create new identity pool if createCognito is true or undefined
       const identityPool = new cognito.CfnIdentityPool(this, 'CognitoIdentityPool', {
           allowUnauthenticatedIdentities: true, // Or false based on requirements
-          identityPoolName: cdk.Fn.join('-', [stack.stackName, id, 'IdentityPool', props.environmentName]),
-          // cognitoIdentityProviders: [], // Add User Pool info if using one
-          // supportedLoginProviders: { ... }, // If using social logins
       });
       this.identityPool = identityPool;
       identityPoolRef = identityPool.ref;
@@ -653,7 +672,6 @@ export class Botmon extends Construct {
     }
 
     const unauthRole = new iam.Role(this, 'CognitoUnauthenticatedRole', {
-        roleName: createTruncatedName(stack.stackName, id, 'CognitoUnauthRole', props.environmentName),
         assumedBy: new iam.FederatedPrincipal('cognito-identity.amazonaws.com', {
              StringEquals: { 'cognito-identity.amazonaws.com:aud': identityPoolRef },
              'ForAnyValue:StringLike': { 'cognito-identity.amazonaws.com:amr': 'unauthenticated' },
@@ -669,7 +687,6 @@ export class Botmon extends Construct {
     }));
 
     const authRole = new iam.Role(this, 'CognitoAuthenticatedRole', {
-        roleName: createTruncatedName(stack.stackName, id, 'CognitoAuthRole', props.environmentName),
         assumedBy: new iam.FederatedPrincipal('cognito-identity.amazonaws.com', {
              StringEquals: { 'cognito-identity.amazonaws.com:aud': identityPoolRef },
              'ForAnyValue:StringLike': { 'cognito-identity.amazonaws.com:amr': 'authenticated' },

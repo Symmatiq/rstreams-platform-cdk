@@ -61,7 +61,6 @@ export class Auth extends Construct {
 
     // Define DynamoDB Tables FIRST
     const leoAuth = new Table(this, "LeoAuth", {
-      tableName: Fn.join('-', [stack.stackName, id, 'LeoAuth', props.environmentName]),
       partitionKey: { name: "identity", type: AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
       billingMode: BillingMode.PAY_PER_REQUEST,
@@ -72,7 +71,6 @@ export class Auth extends Construct {
     this.leoAuthTable = leoAuth;
 
     const leoAuthUser = new Table(this, "LeoAuthUser", {
-      tableName: Fn.join('-', [stack.stackName, id, 'LeoAuthUser', props.environmentName]),
       partitionKey: { name: "identity_id", type: AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
       billingMode: BillingMode.PAY_PER_REQUEST,
@@ -83,7 +81,6 @@ export class Auth extends Construct {
     this.leoAuthUserTable = leoAuthUser;
 
     const leoAuthPolicy = new Table(this, "LeoAuthPolicy", {
-      tableName: Fn.join('-', [stack.stackName, id, 'LeoAuthPolicy', props.environmentName]),
       partitionKey: { name: "name", type: AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
       billingMode: BillingMode.PAY_PER_REQUEST,
@@ -95,7 +92,6 @@ export class Auth extends Construct {
     this.leoAuthPolicyTable = leoAuthPolicy;
 
     const leoAuthIdentity = new Table(this, "LeoAuthIdentity", {
-      tableName: Fn.join('-', [stack.stackName, id, 'LeoAuthIdentity', props.environmentName]),
       partitionKey: { name: "identity", type: AttributeType.STRING },
       removalPolicy: RemovalPolicy.DESTROY,
       sortKey: { name: "policy", type: AttributeType.STRING },
@@ -116,7 +112,6 @@ export class Auth extends Construct {
 
     // Create a separate Managed Policy for DynamoDB access
     const dynamoAccessManagedPolicy = new ManagedPolicy(this, 'LeoAuthDynamoDbManagedPolicy', {
-      managedPolicyName: createTruncatedName(stack.stackName, id, 'DynamoDbManagedPolicy', props.environmentName),
       description: 'Grants access to LeoAuth DynamoDB tables',
       document: new PolicyDocument({
         statements: [
@@ -155,7 +150,6 @@ export class Auth extends Construct {
 
     // Define LeoAuthRole AFTER tables, with an EMPTY managedPolicies array initially
     const leoAuthRole = new Role(this, "LeoAuthRole", {
-      roleName: createTruncatedName(stack.stackName, id, 'LeoAuthRole', props.environmentName),
       assumedBy: new ServicePrincipal("lambda.amazonaws.com"),
       managedPolicies: [], // Start with empty array
       // NO inlinePolicies here
@@ -172,7 +166,6 @@ export class Auth extends Construct {
 
     const apiRoleAssumePolicy = new ServicePrincipal("lambda.amazonaws.com");
     const apiRole = new Role(this, "ApiRole", {
-      roleName: createTruncatedName(stack.stackName, id, 'ApiRole', props.environmentName),
       assumedBy: apiRoleAssumePolicy,
       managedPolicies: [
         ManagedPolicy.fromAwsManagedPolicyName(
@@ -196,7 +189,6 @@ export class Auth extends Construct {
     };
 
     const normalizeDataLambda = new NodejsFunction(this, "NormalizeData", {
-      functionName: createTruncatedName(stack.stackName, id, 'NormalizeData', props.environmentName),
       runtime: Runtime.NODEJS_22_X,
       entry: path.join(__dirname, "..", "..", "lambda", "auth", "normalize-data", "index.js"),
       handler: "handler",
@@ -228,13 +220,11 @@ export class Auth extends Construct {
     normalizeDataLambda.node.addDependency(leoAuthPolicy);
     
     new Rule(this, "ScheduleDataNormalization", {
-      ruleName: Fn.join('-', [stack.stackName, id, 'ScheduleDataNormalizationRule', props.environmentName]),
       schedule: Schedule.cron({ minute: "*" }),
       targets: [new LambdaFunction(normalizeDataLambda)],
     });
 
     const seedDatabaseLambda = new NodejsFunction(this, "SeedDatabase", {
-      functionName: createTruncatedName(stack.stackName, id, 'SeedDatabase', props.environmentName),
       runtime: Runtime.NODEJS_22_X,
       entry: path.join(__dirname, "..", "..", "lambda", "auth", "seed-database", "index.js"),
       handler: "handler",
@@ -273,7 +263,6 @@ export class Auth extends Construct {
     this.leoAuthManagedPolicy = leoAuthManagedPolicy;
 
     const authorizeLambda = new NodejsFunction(this, "Authorize", {
-      functionName: createTruncatedName(stack.stackName, id, 'Authorize', props.environmentName),
       runtime: Runtime.NODEJS_22_X,
       entry: path.join(__dirname, "..", "..", "lambda", "auth", "api", "authorize", "index.js"),
       handler: "handler",

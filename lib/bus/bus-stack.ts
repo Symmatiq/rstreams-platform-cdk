@@ -532,80 +532,37 @@ export class Bus extends Construct {
     function createBusLambda(
         scope: Construct,
         id: string,
-        codeDir: string, // Directory name under lambda/bus/
+        codeDir: string,
         role: iam.IRole,
         environment?: { [key: string]: string },
         timeout?: cdk.Duration,
         memorySize?: number
     ): nodejs.NodejsFunction {
-        // Use a truncated function name format with stack name included
-        const functionName = createTruncatedName(stack.stackName, id, '', props.environmentName);
-        // Resolve entry path relative to the individual lambda's directory within the project root
-        const entryPath = path.resolve(`./lambda/bus/${codeDir}/index.js`); 
-        // Set projectRoot to the main CDK project directory, where package-lock.json is
-        const projectRootPath = path.resolve(`./`); 
-
-        // Use memory size from props.lambdaMemory if available and specific to this function
-        const defaultMemory = 1024; // Default memory if not specified
-        let configuredMemory = memorySize || defaultMemory;
+        const stack = cdk.Stack.of(scope);
+        const defaultProps = stack.node.tryGetContext('nodeJsFunctionProps') || {};
+        const submodulePath = stack.node.tryGetContext('submodulePath');
         
-        // Check if we have memory config in props for this specific lambda
-        if (props.lambdaMemory) {
-            if (id === 'KinesisProcessor' && props.lambdaMemory.kinesisStreamProcessor) {
-                configuredMemory = props.lambdaMemory.kinesisStreamProcessor;
-            } else if (id === 'FirehoseProcessor' && props.lambdaMemory.firehoseStreamProcessor) {
-                configuredMemory = props.lambdaMemory.firehoseStreamProcessor;
-            } else if ((id === 'CronProcessor' || id === 'CronScheduler') && props.lambdaMemory.cronProcessor) {
-                configuredMemory = props.lambdaMemory.cronProcessor;
-            } else if (id === 'LeoEventTrigger' && props.lambdaMemory.eventTrigger) {
-                configuredMemory = props.lambdaMemory.eventTrigger;
-            } else if (id === 'LeoMonitor' && props.lambdaMemory.monitor) {
-                configuredMemory = props.lambdaMemory.monitor;
-            }
+        if (!submodulePath) {
+            throw new Error('Submodule path not found in context. Please set submodulePath in the CDK app.');
         }
-
-        const lambdaFunction = new nodejs.NodejsFunction(scope, id, {
-            runtime: lambda.Runtime.NODEJS_22_X, // Updated to Node.js 22 runtime
-            entry: entryPath,
+        
+        return new nodejs.NodejsFunction(scope, id, {
+            ...defaultProps,
+            entry: path.join(submodulePath, 'lambda/bus', codeDir, 'index.js'),
             handler: 'handler',
+            runtime: lambda.Runtime.NODEJS_18_X,
             role: role,
-            environment: {
-                ...(environment || {}),
-            },
-            timeout: timeout || cdk.Duration.minutes(5),
-            memorySize: configuredMemory,
-            architecture: lambda.Architecture.X86_64,
-            awsSdkConnectionReuse: false,
-            projectRoot: projectRootPath, // Set to main project root
+            environment: environment,
+            timeout: timeout || cdk.Duration.seconds(60),
+            memorySize: memorySize || 128,
             bundling: {
+                ...defaultProps.bundling,
                 minify: true,
                 sourceMap: true,
-                target: 'node22',
-                // Install all dependencies in the Lambda
-                nodeModules: [
-                    'leo-sdk',
-                    'leo-cron',
-                    'leo-logger',
-                    '@aws-sdk/client-sts',
-                    '@aws-sdk/client-iam',
-                    'moment'
-                ],
-                // Don't exclude anything
-                externalModules: [],
-                // Environment variable definitions available during bundling
-                define: {
-                    'process.env.NODE_ENV': '"production"',
-                },
-                // Force esbuild to include any dynamic imports
-                format: nodejs.OutputFormat.CJS
-            },
-            logRetention: logs.RetentionDays.FIVE_DAYS,
+                target: 'node18',
+                externalModules: ['aws-sdk'],
+            }
         });
-
-        cdk.Tags.of(lambdaFunction).add('Stack', cdk.Stack.of(scope).stackName);
-        cdk.Tags.of(lambdaFunction).add('Construct', 'Lambda');
-
-        return lambdaFunction;
     }
 
     // KinesisProcessor

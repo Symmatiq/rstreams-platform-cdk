@@ -58,6 +58,12 @@ export interface BusProps {
      * Optional stack name identifier, used for creating predictable export names.
      */
     exportNamePrefix?: string;
+    /**
+     * Flag to skip creation of specific resources for LocalStack compatibility.
+     */
+    skipForLocalStack?: {
+        firehose?: boolean;
+    };
     stack?: cdk.Stack;
     isTrustingAccount?: boolean;
 }

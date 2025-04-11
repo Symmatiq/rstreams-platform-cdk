@@ -200,7 +200,7 @@ export class Botmon extends Construct {
     // Helper function defined INSIDE constructor or as a private method to access instance members
     const createBotmonLambda = (
         lambdaId: string,
-        entryFilePathPart: string, // CHANGED: Expect path like 'system/get' or 'cron/save'
+        entryFilePathPart: string,
         role: iam.IRole,
         additionalEnv?: { [key: string]: string },
         timeout: cdk.Duration = cdk.Duration.minutes(1),
@@ -211,9 +211,16 @@ export class Botmon extends Construct {
         // Use a truncated function name format
         const functionName = createTruncatedName(stack.stackName, lambdaId, '', props.environmentName);
 
-        // Use entryFilePathPart to build the full entry path
-        const entryPath = path.resolve(`./lambda/botmon/${entryFilePathPart}/index.js`);
-        const projectRootPath = path.resolve(`./`); // Main project root
+        // Get the NodejsFunction configuration from app context
+        const defaultProps = stack.node.tryGetContext('nodeJsFunctionProps') || {};
+        const submodulePath = stack.node.tryGetContext('submodulePath');
+        
+        if (!submodulePath) {
+            throw new Error('Submodule path not found in context. Please set submodulePath in the CDK app.');
+        }
+        
+        // Build the entry path relative to the submodule root
+        const entryPath = path.join(submodulePath, 'lambda/botmon', entryFilePathPart, 'index.js');
 
         // Environment variable setup using this.props and this.leoStatsTable
         const leoSdkEnv = JSON.stringify({
@@ -239,18 +246,19 @@ export class Botmon extends Construct {
             }
         });
         const leoSdkData = JSON.parse(leoSdkEnv);
-        leoSdkData.resources.LeoStats = this.leoStatsTable.tableName; // Access instance member
+        leoSdkData.resources.LeoStats = this.leoStatsTable.tableName;
         const updatedLeoSdkEnv = JSON.stringify(leoSdkData);
 
         return new nodejs.NodejsFunction(this, lambdaId, {
+            ...defaultProps,
             functionName: functionName,
-            entry: entryPath, 
+            entry: entryPath,
             handler: 'handler',
             runtime: lambda.Runtime.NODEJS_22_X,
             role: role,
             environment: {
                 ...(additionalEnv ?? {}),
-                Resources: JSON.stringify({ LeoStats: this.leoStatsTable.tableName }), // Access instance member
+                Resources: JSON.stringify({ LeoStats: this.leoStatsTable.tableName }),
                 leosdk: updatedLeoSdkEnv,
                 leoauthsdk: leoAuthSdkEnv,
                 NODE_ENV: this.props.environmentName,
@@ -261,7 +269,7 @@ export class Botmon extends Construct {
             timeout: timeout,
             memorySize: memorySize,
             logRetention: logs.RetentionDays.ONE_WEEK,
-            projectRoot: projectRootPath,
+            projectRoot: path.resolve(__dirname, '../../'),
             bundling: {
                 externalModules: [
                     // 'aws-sdk', // Removed AWS SDK v2 dependency
@@ -640,18 +648,10 @@ export class Botmon extends Construct {
     this.cloudfrontDistribution = distribution;
 
     // 6. S3 Deployment (DeployWebsite)
-    // Assumes UI build output is in ../bus-ui/dist (or similar)
-    // TODO: Confirm UI build output path
-    new s3deploy.BucketDeployment(this, 'DeployWebsite', {
-        sources: [s3deploy.Source.asset(path.join(__dirname, '..', '..', '..' , 'bus-ui', 'dist'))], // Need correct path
-        destinationBucket: uiBucket,
-        distribution: distribution,
-        distributionPaths: ['/*'], // Invalidate CloudFront cache
-    });
-
+    // NOTE: UI deployment is handled separately through Next.js frontend deployment
+    // This is intentionally left empty as we don't want to deploy from bus-ui anymore
+    
     // 7. Cognito Identity Pool & Roles (Refined Policies - Placeholders)
-    // ... Identity Pool ...
-
     let identityPoolRef: string;
     if (props.createCognito !== false) {
       // Create new identity pool if createCognito is true or undefined

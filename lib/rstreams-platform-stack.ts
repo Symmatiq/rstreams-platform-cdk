@@ -43,6 +43,12 @@ export class RStreamsPlatformStack extends cdk.Stack {
 
     // Set up the environment context from CDK context or props
     const environmentName = this.node.tryGetContext('environment') || props?.environmentName || 'dev';
+    
+    // Get the NodejsFunction configuration from app context
+    const nodejsFunctionProps = this.node.tryGetContext('nodeJsFunctionProps');
+    if (!nodejsFunctionProps) {
+      throw new Error('NodejsFunction configuration is required in app context. Please set nodeJsFunctionProps in the CDK app.');
+    }
 
     // Instantiate new Auth construct
     const auth = new Auth(this, 'Auth', {
